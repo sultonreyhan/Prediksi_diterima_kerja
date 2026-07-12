@@ -130,9 +130,12 @@ def get_dataset() -> pd.DataFrame:
 @st.cache_resource(show_spinner="Melatih model machine learning...")
 def get_model_artifact() -> dict:
     if MODEL_PATH.exists():
-        from src.model import load_model
+        try:
+            from src.model import load_model
 
-        return load_model(MODEL_PATH)
+            return load_model(MODEL_PATH)
+        except Exception:
+            st.warning("Model tersimpan tidak kompatibel, melatih ulang dari dataset...")
 
     df = load_dataset(DATA_PATH)
     return train_and_save_model(DATA_PATH, MODEL_PATH)

@@ -1,0 +1,11 @@
+# Streamlit
+saved_models/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Streamlit logs
+streamlit.err.log
+streamlit.out.log
