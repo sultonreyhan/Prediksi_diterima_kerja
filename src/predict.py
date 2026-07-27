@@ -7,8 +7,29 @@ import pandas as pd
 from src.preprocessing import FEATURE_COLUMNS, build_candidate_dataframe
 
 
+def _validate_candidate(candidate: dict) -> None:
+    jumlah = candidate.get("Jumlah Organisasi", "0")
+    if jumlah == "0":
+        assert candidate.get("Jenis Organisasi") == "Tidak mengikuti organisasi", (
+            "Jumlah Organisasi 0 tidak sesuai dengan Jenis Organisasi"
+        )
+        assert candidate.get("Jabatan Organisasi") == "Tidak pernah mengikuti organisasi", (
+            "Jumlah Organisasi 0 tidak sesuai dengan Jabatan Organisasi"
+        )
+        assert candidate.get("Aktif Organisasi") == "Tidak", (
+            "Jumlah Organisasi 0 harus memiliki Aktif Organisasi = Tidak"
+        )
+    aktif = candidate.get("Aktif Organisasi", "Tidak")
+    tingkat = candidate.get("Tingkat Keaktifan Organisasi (1-5)", 1)
+    if aktif == "Tidak":
+        assert tingkat == 1, (
+            "Aktif Organisasi = Tidak tidak sesuai dengan Tingkat Keaktifan"
+        )
+
+
 def predict_single(artifact: dict, candidate: dict) -> dict:
     """Predict employability for one candidate."""
+    _validate_candidate(candidate)
     candidate_df = build_candidate_dataframe(candidate)
     probability = float(artifact["pipeline"].predict_proba(candidate_df)[:, 1][0])
     prediction = int(probability >= 0.5)

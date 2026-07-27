@@ -113,7 +113,7 @@ def evaluate_pipeline(
 
 
 def train_models(df: pd.DataFrame) -> dict[str, Any]:
-    """Train several models and return the best artifact by F1 score."""
+    """Train several models and return artifact with Logistic Regression as primary model."""
     X_train, X_test, y_train, y_test = create_train_test_data(df)
     comparison_rows = []
     trained_models: dict[str, Pipeline] = {}
@@ -141,17 +141,20 @@ def train_models(df: pd.DataFrame) -> dict[str, Any]:
         by=["F1-score", "Accuracy"],
         ascending=False,
     )
-    best_model_name = str(comparison.iloc[0]["Model"])
     X, y = split_features_target(df)
 
-    final_pipeline = build_pipeline(X, get_candidate_models()[best_model_name])
+    primary_model_name = "Logistic Regression"
+    lr_estimator = LogisticRegression(
+        max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
+    )
+    final_pipeline = build_pipeline(X, lr_estimator)
     final_pipeline.fit(X, y)
 
     return {
         "pipeline": final_pipeline,
-        "best_model_name": best_model_name,
+        "primary_model_name": primary_model_name,
         "comparison": comparison,
-        "evaluation": evaluations[best_model_name],
+        "evaluation": evaluations[primary_model_name],
         "evaluations": evaluations,
         "feature_columns": X.columns.tolist(),
         "target_label": POSITIVE_LABEL,
@@ -183,5 +186,6 @@ def train_and_save_model(
 
 if __name__ == "__main__":
     model_artifact = train_and_save_model()
-    print(f"Best model: {model_artifact['best_model_name']}")
+    print(f"Primary model: {model_artifact['primary_model_name']}")
+    print(model_artifact["comparison"].to_string(index=False))
     print(model_artifact["comparison"].to_string(index=False))

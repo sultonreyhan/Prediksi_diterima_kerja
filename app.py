@@ -35,13 +35,6 @@ DATA_PATH = Path("data/dummy_dataset_employability.xlsx")
 
 CUSTOM_CSS = """
 <style>
-    :root {
-        --primary: #2563eb;
-        --panel: rgba(255, 255, 255, 0.78);
-        --border: rgba(148, 163, 184, 0.28);
-        --text-muted: #64748b;
-    }
-
     .main .block-container {
         padding-top: 1.5rem;
         padding-bottom: 2rem;
@@ -49,7 +42,7 @@ CUSTOM_CSS = """
     }
 
     [data-testid="stSidebar"] {
-        border-right: 1px solid var(--border);
+        border-right: 1px solid #30363d;
     }
 
     .app-title {
@@ -60,22 +53,22 @@ CUSTOM_CSS = """
     }
 
     .app-subtitle {
-        color: var(--text-muted);
+        color: #8b949e;
         font-size: 1rem;
         line-height: 1.55;
         max-width: 860px;
     }
 
     .metric-card {
-        border: 1px solid var(--border);
+        border: 1px solid #30363d;
         border-radius: 8px;
         padding: 1rem;
-        background: var(--panel);
+        background: #161b22;
         min-height: 112px;
     }
 
     .metric-label {
-        color: var(--text-muted);
+        color: #8b949e;
         font-size: 0.86rem;
         margin-bottom: 0.45rem;
     }
@@ -83,27 +76,40 @@ CUSTOM_CSS = """
     .metric-value {
         font-size: 1.8rem;
         font-weight: 800;
-        color: #0f172a;
+        color: #f0f6fc;
     }
 
     .workflow-step {
-        border-left: 3px solid var(--primary);
+        border-left: 3px solid #ff4b55;
         padding: 0.75rem 1rem;
-        background: rgba(37, 99, 235, 0.06);
+        background: rgba(255, 75, 85, 0.06);
         border-radius: 6px;
         min-height: 92px;
     }
 
     .small-muted {
-        color: var(--text-muted);
+        color: #8b949e;
         font-size: 0.9rem;
     }
 
+    .accent-text {
+        color: #ff4b55;
+        font-size: 0.86rem;
+    }
+
     div[data-testid="stMetric"] {
-        border: 1px solid var(--border);
+        border: 1px solid #30363d;
         border-radius: 8px;
         padding: 0.85rem 1rem;
-        background: var(--panel);
+        background: #161b22;
+    }
+
+    div[data-testid="stMetric"] label {
+        color: #8b949e !important;
+    }
+
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #f0f6fc !important;
     }
 </style>
 """
@@ -156,7 +162,7 @@ def render_home(df: pd.DataFrame, artifact: dict) -> None:
     evaluation = artifact["evaluation"]
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", artifact["best_model_name"])
+        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", f"Primary Model: {artifact['primary_model_name']}")
     with col2:
         metric_card("Jumlah Data", f"{len(df):,}", "baris dataset")
     with col3:
@@ -268,29 +274,97 @@ def render_prediction(df: pd.DataFrame, artifact: dict) -> None:
     )
 
     options = get_input_options(df)
-    with st.form("candidate_form"):
-        col1, col2, col3 = st.columns(3)
-        candidate = {}
+    candidate: dict[str, object] = {}
 
-        form_columns = [col1, col2, col3]
-        for index, column in enumerate(FEATURE_COLUMNS):
-            if column not in options:
-                continue
-            with form_columns[index % 3]:
-                if pd.api.types.is_numeric_dtype(df[column]):
-                    values = options[column]
-                    candidate[column] = st.slider(
-                        column,
-                        min_value=int(min(values)),
-                        max_value=int(max(values)),
-                        value=int(round(df[column].median())),
-                    )
-                else:
-                    candidate[column] = st.selectbox(column, options[column])
+    org_columns = {
+        "Jumlah Organisasi",
+        "Aktif Organisasi",
+        "Jenis Organisasi",
+        "Jabatan Organisasi",
+        "Tingkat Keaktifan Organisasi (1-5)",
+    }
+    non_org_columns = [c for c in FEATURE_COLUMNS if c not in org_columns]
 
-        submitted = st.form_submit_button("Prediksi Employability", use_container_width=True)
+    col1, col2, col3 = st.columns(3)
+    form_cols = [col1, col2, col3]
+    idx = 0
 
-    if submitted:
+    for column in non_org_columns:
+        if column not in options:
+            continue
+        with form_cols[idx % 3]:
+            if pd.api.types.is_numeric_dtype(df[column]):
+                values = options[column]
+                candidate[column] = st.slider(
+                    column,
+                    min_value=int(min(values)),
+                    max_value=int(max(values)),
+                    value=int(round(df[column].median())),
+                    key=f"slider_{column}",
+                )
+            else:
+                candidate[column] = st.selectbox(
+                    column, options[column], key=f"sel_{column}"
+                )
+        idx += 1
+
+    with form_cols[idx % 3]:
+        jumlah = st.selectbox(
+            "Jumlah Organisasi",
+            options["Jumlah Organisasi"],
+            key="jumlah_organisasi",
+        )
+    idx += 1
+    candidate["Jumlah Organisasi"] = jumlah
+
+    if jumlah == "0":
+        st.info("Detail organisasi tidak diperlukan karena jumlah organisasi adalah 0.")
+        candidate["Jenis Organisasi"] = "Tidak mengikuti organisasi"
+        candidate["Jabatan Organisasi"] = "Tidak pernah mengikuti organisasi"
+        candidate["Aktif Organisasi"] = "Tidak"
+        candidate["Tingkat Keaktifan Organisasi (1-5)"] = 1
+    else:
+        with form_cols[idx % 3]:
+            candidate["Jenis Organisasi"] = st.selectbox(
+                "Jenis Organisasi",
+                options["Jenis Organisasi"],
+                key="jenis_organisasi",
+            )
+        idx += 1
+        with form_cols[idx % 3]:
+            candidate["Jabatan Organisasi"] = st.selectbox(
+                "Jabatan Organisasi",
+                options["Jabatan Organisasi"],
+                key="jabatan_organisasi",
+            )
+        idx += 1
+        with form_cols[idx % 3]:
+            aktif = st.selectbox(
+                "Aktif Organisasi",
+                options["Aktif Organisasi"],
+                key="aktif_organisasi",
+            )
+        idx += 1
+        candidate["Aktif Organisasi"] = aktif
+
+        if aktif == "Ya":
+            with form_cols[idx % 3]:
+                candidate["Tingkat Keaktifan Organisasi (1-5)"] = st.slider(
+                    "Tingkat Keaktifan Organisasi (1-5)",
+                    min_value=1,
+                    max_value=5,
+                    value=3,
+                    key="tingkat_keaktifan",
+                )
+            idx += 1
+        else:
+            st.caption("Tingkat keaktifan otomatis diisi 1 karena tidak aktif berorganisasi.")
+            candidate["Tingkat Keaktifan Organisasi (1-5)"] = 1
+
+    st.write("")
+    predict_clicked = st.button("Prediksi Employability", use_container_width=True)
+
+    if predict_clicked:
         result = predict_single(artifact, candidate)
         probability = result["probability"]
         st.write("")
@@ -338,12 +412,17 @@ def render_model_evaluation(artifact: dict) -> None:
 
     evaluation = artifact["evaluation"]
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Accuracy", f"{evaluation['accuracy']:.1%}")
-    col2.metric("Precision", f"{evaluation['precision']:.1%}")
-    col3.metric("Recall", f"{evaluation['recall']:.1%}")
-    col4.metric("F1-score", f"{evaluation['f1']:.1%}")
-    roc_auc = evaluation["roc_auc"]
-    col5.metric("ROC AUC", "N/A" if roc_auc is None else f"{roc_auc:.1%}")
+    with col1:
+        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", artifact["primary_model_name"])
+    with col2:
+        metric_card("Precision", f"{evaluation['precision']:.1%}", "")
+    with col3:
+        metric_card("Recall", f"{evaluation['recall']:.1%}", "")
+    with col4:
+        metric_card("F1-score", f"{evaluation['f1']:.1%}", "")
+    with col5:
+        roc_auc = evaluation["roc_auc"]
+        metric_card("ROC AUC", "N/A" if roc_auc is None else f"{roc_auc:.1%}", "")
 
     st.subheader("Model Comparison")
     comparison = artifact["comparison"].copy()
@@ -432,7 +511,7 @@ def main() -> None:
         ],
     )
     st.sidebar.divider()
-    st.sidebar.metric("Best Model", artifact["best_model_name"])
+    st.sidebar.metric("Primary Model", artifact["primary_model_name"])
     st.sidebar.metric("Rows", f"{len(df):,}")
 
     if page == "Home":
