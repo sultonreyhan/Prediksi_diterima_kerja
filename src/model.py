@@ -188,4 +188,3 @@ if __name__ == "__main__":
     model_artifact = train_and_save_model()
     print(f"Primary model: {model_artifact['primary_model_name']}")
     print(model_artifact["comparison"].to_string(index=False))
-    print(model_artifact["comparison"].to_string(index=False))

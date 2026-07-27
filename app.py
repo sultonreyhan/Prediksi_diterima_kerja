@@ -139,12 +139,15 @@ def get_model_artifact() -> dict:
         try:
             from src.model import load_model
 
-            return load_model(MODEL_PATH)
+            artifact = load_model(MODEL_PATH)
+            if "primary_model_name" in artifact:
+                return artifact
         except Exception:
-            st.warning("Model tersimpan tidak kompatibel, melatih ulang dari dataset...")
+            pass
 
     df = load_dataset(DATA_PATH)
-    return train_and_save_model(DATA_PATH, MODEL_PATH)
+    artifact = train_and_save_model(DATA_PATH, MODEL_PATH)
+    return artifact
 
 
 def render_header(title: str, subtitle: str) -> None:
@@ -162,7 +165,7 @@ def render_home(df: pd.DataFrame, artifact: dict) -> None:
     evaluation = artifact["evaluation"]
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", f"Primary Model: {artifact['primary_model_name']}")
+        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", f"Primary Model: {artifact.get('primary_model_name', 'Logistic Regression')}")
     with col2:
         metric_card("Jumlah Data", f"{len(df):,}", "baris dataset")
     with col3:
@@ -413,7 +416,7 @@ def render_model_evaluation(artifact: dict) -> None:
     evaluation = artifact["evaluation"]
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
-        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", artifact["primary_model_name"])
+        metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", artifact.get("primary_model_name", "Logistic Regression"))
     with col2:
         metric_card("Precision", f"{evaluation['precision']:.1%}", "")
     with col3:
@@ -511,7 +514,7 @@ def main() -> None:
         ],
     )
     st.sidebar.divider()
-    st.sidebar.metric("Primary Model", artifact["primary_model_name"])
+    st.sidebar.metric("Primary Model", artifact.get("primary_model_name", "Logistic Regression"))
     st.sidebar.metric("Rows", f"{len(df):,}")
 
     if page == "Home":
