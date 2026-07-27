@@ -410,7 +410,7 @@ def render_prediction(df: pd.DataFrame, artifact: dict) -> None:
 def render_model_evaluation(artifact: dict) -> None:
     render_header(
         "Model Evaluation",
-        "Evaluasi performa model pada data test dan perbandingan beberapa baseline machine learning.",
+        "Evaluasi performa model Logistic Regression pada data pengujian.",
     )
 
     evaluation = artifact["evaluation"]
@@ -426,23 +426,6 @@ def render_model_evaluation(artifact: dict) -> None:
     with col5:
         roc_auc = evaluation["roc_auc"]
         metric_card("ROC AUC", "N/A" if roc_auc is None else f"{roc_auc:.1%}", "")
-
-    st.subheader("Model Comparison")
-    comparison = artifact["comparison"].copy()
-    st.dataframe(
-        comparison.style.format(
-            {
-                "Accuracy": "{:.2%}",
-                "Precision": "{:.2%}",
-                "Recall": "{:.2%}",
-                "F1-score": "{:.2%}",
-                "ROC AUC": "{:.2%}",
-            },
-            na_rep="N/A",
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
 
     col_left, col_right = st.columns(2)
     with col_left:
