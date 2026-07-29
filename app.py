@@ -164,7 +164,7 @@ def get_model_artifact() -> dict:
             from src.model import load_model
 
             artifact = load_model(MODEL_PATH)
-            if artifact.get("model_version") == 2:
+            if artifact.get("model_version") == 3:
                 return artifact
         except Exception:
             pass
@@ -277,8 +277,21 @@ def render_preprocessing() -> None:
         ),
         (
             "4. Encoding",
-            "Fitur ordinal (`IPK`, `Lama Studi`, `Tingkat Keaktifan`, `Jumlah Organisasi`) menggunakan OrdinalEncoder. Fitur nominal (`Rumpun Jurusan`, `Jenis Organisasi`, dll) menggunakan OneHotEncoder.",
-            "ColumnTransformer([\n    ('ordinal', OrdinalEncoder(categories=...), ordinal_features),\n    ('nominal', OneHotEncoder(handle_unknown='ignore'), nominal_features),\n    ('numeric', StandardScaler(), numeric_features)\n])",
+            "Fitur ordinal (IPK, Lama Studi, Jumlah Organisasi) menggunakan OrdinalEncoder. "
+            "Fitur nominal (Rumpun Jurusan, Jabatan Organisasi, Ya/Tidak features) menggunakan OneHotEncoder. "
+            "Tingkat Keaktifan (integer 1-5) distandarisasi dengan StandardScaler. "
+            "Jenis Organisasi diencoding sebagai MULTI-HOT: setiap jenis organisasi (BEM, Himpunan, UKM, dll) menjadi kolom biner terpisah — "
+            "bukan OneHot per kombinasi string.",
+            "# Jenis Organisasi → multi-hot binary indicators\n"
+            "org_BEM          = 1 if 'BEM' in selections else 0\n"
+            "org_Himpunan     = 1 if 'Himpunan Mahasiswa' in selections else 0\n"
+            "org_Kepanitiaan  = 1 if 'Kepanitaan Acara' in selections else 0\n"
+            "org_Komunitas    = 1 if 'Komunitas Kampus' in selections else 0\n"
+            "org_TSR_PMI      = 1 if 'TSR PMI' in selections else 0\n"
+            "org_UKM          = 1 if 'UKM' in selections else 0\n\n"
+            "# Ordinal: OrdinalEncoder\n"
+            "# Nominal/binary: OneHotEncoder(handle_unknown='ignore')\n"
+            "# Numeric (Tingkat Keaktifan, Tahun Lulus): StandardScaler",
         ),
         (
             "5. Train Test Split",
@@ -474,6 +487,21 @@ def render_model_evaluation(artifact: dict) -> None:
     )
 
     evaluation = artifact["evaluation"]
+
+    # Data split info
+    eligible = artifact.get("eligible_ml_rows", "?")
+    excluded = artifact.get("excluded_belum_bekerja", "?")
+    train_sz = artifact.get("train_size", "?")
+    test_sz = artifact.get("test_size", "?")
+    cw_used = artifact.get("class_weight_used", "?")
+    st.info(
+        f"**Data:** Total dataset {artifact.get('dataset_summary', {}).get('original_rows', '?')} baris | "
+        f"Eligible ML (4 kelas): **{eligible}** | "
+        f"Dikecualikan Belum Bekerja: **{excluded}** | "
+        f"Train: **{train_sz}** | Test: **{test_sz}** | "
+        f"class_weight: **{cw_used}**"
+    )
+
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         metric_card("Accuracy", f"{evaluation['accuracy']:.1%}", artifact.get("primary_model_name", "Multiclass Logistic Regression"))
@@ -485,7 +513,9 @@ def render_model_evaluation(artifact: dict) -> None:
         metric_card("Weighted F1", f"{evaluation['weighted_f1']:.3f}", "")
     with col5:
         cv_f1 = artifact.get("cv_macro_f1_mean")
-        metric_card("CV Macro F1", f"{cv_f1:.3f}" if cv_f1 else "N/A", "5-fold stratified CV")
+        cv_f1_std = artifact.get("cv_macro_f1_std")
+        label = f"{cv_f1:.3f} ± {cv_f1_std:.3f}" if cv_f1 is not None else "N/A"
+        metric_card("CV Macro F1", label, "5-fold stratified CV")
 
     col_left, col_right = st.columns(2)
     with col_left:
@@ -496,10 +526,11 @@ def render_model_evaluation(artifact: dict) -> None:
     with col_right:
         st.subheader("Classification Report")
         report = evaluation.get("classification_report", {})
+        # Show in canonical class order
+        class_order = ["< 1 bulan", "1 - 3 bulan", "3 - 6 bulan", "> 6 bulan"]
         report_rows = []
-        for cls_name, metrics in report.items():
-            if cls_name in ("accuracy", "macro avg", "weighted avg"):
-                continue
+        for cls_name in class_order:
+            metrics = report.get(cls_name)
             if isinstance(metrics, dict):
                 report_rows.append({
                     "Kelas": cls_name,
@@ -520,10 +551,15 @@ def render_model_evaluation(artifact: dict) -> None:
         cv_f1_std = artifact.get("cv_macro_f1_std")
         cv_acc = artifact.get("cv_accuracy_mean")
         cv_acc_std = artifact.get("cv_accuracy_std")
-        if cv_f1:
-            st.write(f"5-fold Stratified Cross-Validation:")
-            st.write(f"- Macro F1: {cv_f1:.3f} (+/- {cv_f1_std:.3f})")
-            st.write(f"- Accuracy: {cv_acc:.3f} (+/- {cv_acc_std:.3f})")
+        cv_bal = artifact.get("cv_balanced_acc_mean")
+        cv_bal_std = artifact.get("cv_balanced_acc_std")
+        if cv_f1 is not None:
+            st.write("5-fold Stratified Cross-Validation (full pipeline, no leakage):")
+            st.write(f"- Macro F1:          {cv_f1:.3f} ± {cv_f1_std:.3f}")
+            if cv_acc is not None:
+                st.write(f"- Accuracy:          {cv_acc:.3f} ± {cv_acc_std:.3f}")
+            if cv_bal is not None:
+                st.write(f"- Balanced Accuracy: {cv_bal:.3f} ± {cv_bal_std:.3f}")
 
 
 def render_about() -> None:

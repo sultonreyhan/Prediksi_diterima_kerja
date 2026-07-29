@@ -92,8 +92,15 @@ def confusion_matrix_chart(matrix: np.ndarray, labels: list[str]) -> go.Figure:
     return fig
 
 
+_CLASS_ORDER = ["< 1 bulan", "1 - 3 bulan", "3 - 6 bulan", "> 6 bulan"]
+
+
 def probability_bar_chart(probabilities: dict[str, float]) -> go.Figure:
-    classes = list(probabilities.keys())
+    # Sort by canonical waiting-time order
+    all_keys = list(probabilities.keys())
+    ordered_keys = [c for c in _CLASS_ORDER if c in all_keys]
+    ordered_keys += [c for c in all_keys if c not in ordered_keys]
+    classes = ordered_keys
     probs = [probabilities[c] * 100 for c in classes]
     colors = ["#2563eb", "#14b8a6", "#f59e0b", "#ef4444"]
 
@@ -125,26 +132,39 @@ def feature_importance_chart(artifact: dict) -> go.Figure | None:
         return None
 
     coef = model.coef_
-    classes = model.classes_
-    feature_names = preprocessor.get_feature_names_out()
+    # Use canonical class order from artifact if available
+    class_order = artifact.get("target_classes", model.classes_.tolist())
+    pipeline_classes = model.classes_.tolist()
+
+    raw_names = preprocessor.get_feature_names_out()
+    # Strip sklearn ColumnTransformer prefix (e.g. "nominal__Pernah Magang_Ya" -> "Pernah Magang_Ya")
+    def _clean_name(n: str) -> str:
+        parts = n.split("__", 1)
+        return parts[1] if len(parts) == 2 else n
+
+    feature_names = [_clean_name(n) for n in raw_names]
 
     fig = go.Figure()
-    for i, cls in enumerate(classes):
+    for cls in class_order:
+        if cls not in pipeline_classes:
+            continue
+        i = pipeline_classes.index(cls)
         importance = np.abs(coef[i])
-        top_indices = np.argsort(importance)[-8:]
+        top_indices = np.argsort(importance)[-10:]
         fig.add_trace(go.Bar(
             name=str(cls),
             y=[feature_names[j] for j in top_indices],
-            x=importance[top_indices],
+            x=coef[i][top_indices],  # signed coefficients, not abs
             orientation="h",
         ))
 
     fig.update_layout(
-        title="Feature Importance per Class (|Coefficient|)",
+        title="Koefisien Logistic Regression per Kelas (top 10 per kelas)",
+        xaxis_title="Nilai Koefisien (positif = lebih cepat kerja, negatif = lebih lambat)",
         barmode="group",
-        height=400,
-        margin=dict(l=10, r=10, t=45, b=10),
-        legend_title="Class",
+        height=480,
+        margin=dict(l=10, r=10, t=55, b=10),
+        legend_title="Kelas Waktu Tunggu",
     )
     return fig
 
