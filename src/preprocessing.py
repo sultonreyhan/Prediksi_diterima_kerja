@@ -1,5 +1,3 @@
-"""Preprocessing utilities for the employability prediction project."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,15 +6,15 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
 
 DATA_PATH = Path("data/Kuesioner Faktor Akademik dan Aktivitas Organisasi terhadap Kecepatan Diterima Kerja Lulusan Mahasiswa  (Responses) - Form responses 1.csv")
-TARGET_COLUMN = "Status Pekerjaan"
-POSITIVE_LABEL = "Sudah bekerja"
+TARGET_COLUMN = "Waktu Tunggu Kerja"
+TARGET_CLASSES = ["< 1 bulan", "1 - 3 bulan", "3 - 6 bulan", "> 6 bulan"]
 
 LEAKAGE_COLUMNS = [
-    "Waktu Tunggu Kerja",
+    "Status Pekerjaan",
     "Kesesuaian Pekerjaan",
     "Kisaran Gaji",
 ]
@@ -35,6 +33,24 @@ FEATURE_COLUMNS = [
     "Jabatan Organisasi",
     "Tingkat Keaktifan Organisasi (1-5)",
     "Jumlah Organisasi",
+]
+
+ORDINAL_COLUMNS = {
+    "Kategori IPK": ["< 3.00", "3.00 - 3.25", "3.26 - 3.50", "> 3.50"],
+    "Lama Masa Studi": ["< 4 tahun", "4 - 5 tahun", "> 5 tahun"],
+    "Tingkat Keaktifan Organisasi (1-5)": [1, 2, 3, 4, 5],
+    "Jumlah Organisasi": ["0", "1", "2", ">2"],
+}
+
+NOMINAL_COLUMNS = [
+    "Rumpun Jurusan",
+    "Jenjang Pendidikan",
+    "Pernah Magang",
+    "Memiliki Sertifikasi",
+    "Memiliki Prestasi",
+    "Aktif Organisasi",
+    "Jenis Organisasi",
+    "Jabatan Organisasi",
 ]
 
 COLUMN_MAPPING = {
@@ -61,7 +77,6 @@ DROP_COLUMNS = ["Timestamp", "Saran", "Email address"]
 
 
 def load_dataset(path: str | Path = DATA_PATH) -> pd.DataFrame:
-    """Load the CSV survey dataset and normalize column names."""
     df = pd.read_csv(path)
     df.columns = df.columns.str.strip()
     df = df.drop(columns=[c for c in DROP_COLUMNS if c in df.columns], errors="ignore")
@@ -69,48 +84,84 @@ def load_dataset(path: str | Path = DATA_PATH) -> pd.DataFrame:
     return df
 
 
+def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].astype(str).str.strip()
+
+    masa_studi_map = {
+        "2,5": "< 4 tahun",
+        "3 tahun": "< 4 tahun",
+    }
+    df["Lama Masa Studi"] = df["Lama Masa Studi"].replace(masa_studi_map)
+
+    df["Jumlah Organisasi"] = df["Jumlah Organisasi"].replace({"> 2": ">2", ">1": ">2"})
+
+    unk_masa = df.loc[~df["Lama Masa Studi"].isin(ORDINAL_COLUMNS["Lama Masa Studi"]), "Lama Masa Studi"]
+    if len(unk_masa) > 0:
+        print(f"  [WARN] Unmapped Lama Masa Studi values: {unk_masa.unique().tolist()}")
+
+    return df
+
+
 def build_target(series: pd.Series) -> pd.Series:
-    """Convert employment status into a binary target for employability."""
-    return (series.astype(str).str.strip() == POSITIVE_LABEL).astype(int)
+    return series.astype(str).str.strip()
 
 
 def split_features_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Return model-ready features and binary target."""
+    df = clean_dataset(df)
     available_features = [column for column in FEATURE_COLUMNS if column in df.columns]
     X = df[available_features].copy()
     y = build_target(df[TARGET_COLUMN])
     return X, y
 
 
-def get_feature_groups(X: pd.DataFrame) -> tuple[list[str], list[str]]:
-    """Identify numeric and categorical feature groups."""
+def filter_training_data(X: pd.DataFrame, y: pd.Series) -> tuple[pd.DataFrame, pd.Series, int]:
+    mask = y != "Belum bekerja"
+    X_train = X[mask].copy()
+    y_train = y[mask].copy()
+    excluded = int((~mask).sum())
+    return X_train, y_train, excluded
+
+
+def get_feature_groups(X: pd.DataFrame) -> tuple[list[str], list[str], list[str]]:
     numeric_features = X.select_dtypes(include=["number"]).columns.tolist()
-    categorical_features = [column for column in X.columns if column not in numeric_features]
-    return numeric_features, categorical_features
+    ordinal_features = [c for c in ORDINAL_COLUMNS if c in X.columns and c not in numeric_features]
+    nominal_features = [c for c in NOMINAL_COLUMNS if c in X.columns]
+    ordinal_from_numeric = [c for c in ORDINAL_COLUMNS if c in numeric_features]
+    ordinal_features = ordinal_features + ordinal_from_numeric
+    nominal_features = [c for c in nominal_features if c not in ordinal_features]
+    numeric_features = [c for c in numeric_features if c not in ordinal_from_numeric]
+    return numeric_features, ordinal_features, nominal_features
 
 
 def create_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    """Create a preprocessing transformer for mixed tabular data."""
-    numeric_features, categorical_features = get_feature_groups(X)
+    numeric_features, ordinal_features, nominal_features = get_feature_groups(X)
 
-    numeric_pipeline = Pipeline(
-        steps=[
-            ("scaler", StandardScaler()),
-        ]
-    )
-    categorical_pipeline = Pipeline(
-        steps=[
-            ("encoder", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
-        ]
-    )
+    transformers = []
 
-    return ColumnTransformer(
-        transformers=[
-            ("numeric", numeric_pipeline, numeric_features),
-            ("categorical", categorical_pipeline, categorical_features),
-        ],
-        remainder="drop",
-    )
+    if numeric_features:
+        transformers.append(("numeric", Pipeline([("scaler", StandardScaler())]), numeric_features))
+
+    if ordinal_features:
+        ordinal_categories = [
+            ORDINAL_COLUMNS[col] for col in ordinal_features
+        ]
+        transformers.append((
+            "ordinal",
+            Pipeline([("encoder", OrdinalEncoder(categories=ordinal_categories))]),
+            ordinal_features,
+        ))
+
+    if nominal_features:
+        transformers.append((
+            "nominal",
+            Pipeline([("encoder", OneHotEncoder(handle_unknown="ignore", sparse_output=False))]),
+            nominal_features,
+        ))
+
+    return ColumnTransformer(transformers=transformers, remainder="drop")
 
 
 def create_train_test_data(
@@ -118,8 +169,8 @@ def create_train_test_data(
     test_size: float = 0.2,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    """Split data into train and test sets with stratification when possible."""
     X, y = split_features_target(df)
+    X, y, _ = filter_training_data(X, y)
     stratify = y if y.nunique() > 1 else None
     return train_test_split(
         X,
@@ -131,12 +182,10 @@ def create_train_test_data(
 
 
 def get_input_options(df: pd.DataFrame) -> dict[str, list]:
-    """Collect sorted options for Streamlit form controls."""
     options: dict[str, list] = {}
     for column in FEATURE_COLUMNS:
         if column not in df.columns:
             continue
-
         values = df[column].dropna().unique().tolist()
         if pd.api.types.is_numeric_dtype(df[column]):
             options[column] = sorted(values)
@@ -146,5 +195,18 @@ def get_input_options(df: pd.DataFrame) -> dict[str, list]:
 
 
 def build_candidate_dataframe(candidate: dict) -> pd.DataFrame:
-    """Create a one-row DataFrame from form input using the expected column order."""
     return pd.DataFrame([{column: candidate.get(column) for column in FEATURE_COLUMNS}])
+
+
+def dataset_summary(df: pd.DataFrame) -> dict:
+    X, y = split_features_target(df)
+    _, _, excluded = filter_training_data(X, y)
+    X_filt, y_filt, _ = filter_training_data(X, y)
+    return {
+        "original_rows": len(df),
+        "excluded_unknown": excluded,
+        "training_rows": len(X_filt),
+        "target_distribution": y_filt.value_counts().to_dict(),
+        "features": FEATURE_COLUMNS,
+        "excluded_leakage": LEAKAGE_COLUMNS,
+    }

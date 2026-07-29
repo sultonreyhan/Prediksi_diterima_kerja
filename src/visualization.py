@@ -1,5 +1,3 @@
-"""Plotly visualization helpers for the Streamlit dashboard."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -8,13 +6,13 @@ import plotly.express as px
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
 
-from src.preprocessing import POSITIVE_LABEL, TARGET_COLUMN, build_target
+from src.preprocessing import TARGET_COLUMN
 
 
 COLOR_SEQUENCE = ["#2563eb", "#14b8a6", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"]
 
 
-def label_distribution_chart(df: pd.DataFrame) -> go.Figure:
+def target_distribution_chart(df: pd.DataFrame) -> go.Figure:
     counts = df[TARGET_COLUMN].value_counts().reset_index()
     counts.columns = [TARGET_COLUMN, "Jumlah"]
     fig = px.pie(
@@ -24,7 +22,7 @@ def label_distribution_chart(df: pd.DataFrame) -> go.Figure:
         hole=0.45,
         color_discrete_sequence=COLOR_SEQUENCE,
     )
-    fig.update_layout(margin=dict(l=10, r=10, t=35, b=10), title="Distribusi Status Pekerjaan")
+    fig.update_layout(margin=dict(l=10, r=10, t=35, b=10), title="Distribusi Waktu Tunggu Kerja")
     return fig
 
 
@@ -50,7 +48,7 @@ def year_histogram(df: pd.DataFrame) -> go.Figure:
         color=TARGET_COLUMN,
         barmode="group",
         color_discrete_sequence=COLOR_SEQUENCE,
-        title="Sebaran Tahun Lulus Berdasarkan Status",
+        title="Sebaran Tahun Lulus Berdasarkan Waktu Tunggu",
     )
     fig.update_layout(margin=dict(l=10, r=10, t=45, b=10))
     return fig
@@ -77,8 +75,7 @@ def correlation_heatmap(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def confusion_matrix_chart(matrix: np.ndarray) -> go.Figure:
-    labels = ["Belum bekerja/studi", POSITIVE_LABEL]
+def confusion_matrix_chart(matrix: np.ndarray, labels: list[str]) -> go.Figure:
     fig = ff.create_annotated_heatmap(
         z=matrix,
         x=labels,
@@ -95,55 +92,27 @@ def confusion_matrix_chart(matrix: np.ndarray) -> go.Figure:
     return fig
 
 
-def roc_curve_chart(roc_data: dict | None) -> go.Figure:
+def probability_bar_chart(probabilities: dict[str, float]) -> go.Figure:
+    classes = list(probabilities.keys())
+    probs = [probabilities[c] * 100 for c in classes]
+    colors = ["#2563eb", "#14b8a6", "#f59e0b", "#ef4444"]
+
     fig = go.Figure()
-    if roc_data:
-        fig.add_trace(
-            go.Scatter(
-                x=roc_data["fpr"],
-                y=roc_data["tpr"],
-                mode="lines",
-                name="ROC Curve",
-                line=dict(color="#2563eb", width=3),
-            )
-        )
-    fig.add_trace(
-        go.Scatter(
-            x=[0, 1],
-            y=[0, 1],
-            mode="lines",
-            name="Baseline",
-            line=dict(color="#94a3b8", dash="dash"),
-        )
-    )
+    fig.add_trace(go.Bar(
+        x=classes,
+        y=probs,
+        marker_color=colors[:len(classes)],
+        text=[f"{p:.1f}%" for p in probs],
+        textposition="outside",
+    ))
     fig.update_layout(
-        title="ROC Curve",
-        xaxis_title="False Positive Rate",
-        yaxis_title="True Positive Rate",
-        margin=dict(l=10, r=10, t=55, b=10),
+        title="Probabilitas Prediksi per Kelas",
+        xaxis_title="Kelas Waktu Tunggu",
+        yaxis_title="Probabilitas (%)",
+        yaxis=dict(range=[0, 100]),
+        margin=dict(l=10, r=10, t=45, b=10),
+        height=320,
     )
-    return fig
-
-
-def probability_gauge(probability: float) -> go.Figure:
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=probability * 100,
-            number={"suffix": "%", "font": {"size": 34}},
-            gauge={
-                "axis": {"range": [0, 100]},
-                "bar": {"color": "#2563eb"},
-                "steps": [
-                    {"range": [0, 45], "color": "#fee2e2"},
-                    {"range": [45, 70], "color": "#fef3c7"},
-                    {"range": [70, 100], "color": "#dcfce7"},
-                ],
-                "threshold": {"line": {"color": "#0f172a", "width": 4}, "value": 50},
-            },
-        )
-    )
-    fig.update_layout(height=280, margin=dict(l=15, r=15, t=20, b=10))
     return fig
 
 
@@ -152,44 +121,45 @@ def feature_importance_chart(artifact: dict) -> go.Figure | None:
     model = pipeline.named_steps["model"]
     preprocessor = pipeline.named_steps["preprocessor"]
 
-    if hasattr(model, "feature_importances_"):
-        values = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        values = np.abs(model.coef_[0])
-    else:
+    if not hasattr(model, "coef_"):
         return None
 
-    names = preprocessor.get_feature_names_out()
-    importance = (
-        pd.DataFrame({"Feature": names, "Importance": values})
-        .sort_values("Importance", ascending=False)
-        .head(12)
+    coef = model.coef_
+    classes = model.classes_
+    feature_names = preprocessor.get_feature_names_out()
+
+    fig = go.Figure()
+    for i, cls in enumerate(classes):
+        importance = np.abs(coef[i])
+        top_indices = np.argsort(importance)[-8:]
+        fig.add_trace(go.Bar(
+            name=str(cls),
+            y=[feature_names[j] for j in top_indices],
+            x=importance[top_indices],
+            orientation="h",
+        ))
+
+    fig.update_layout(
+        title="Feature Importance per Class (|Coefficient|)",
+        barmode="group",
+        height=400,
+        margin=dict(l=10, r=10, t=45, b=10),
+        legend_title="Class",
     )
-    fig = px.bar(
-        importance.sort_values("Importance"),
-        x="Importance",
-        y="Feature",
-        orientation="h",
-        color="Importance",
-        color_continuous_scale="Blues",
-        title="Top Feature Importance",
-    )
-    fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), height=460)
     return fig
 
 
-def employment_rate_by_column(df: pd.DataFrame, column: str) -> go.Figure:
+def waiting_time_rate_by_column(df: pd.DataFrame, column: str) -> go.Figure:
     temp = df.copy()
-    temp["Employability Rate"] = build_target(temp[TARGET_COLUMN])
-    grouped = temp.groupby(column, as_index=False)["Employability Rate"].mean()
-    grouped["Employability Rate"] = grouped["Employability Rate"] * 100
+    grouped = temp.groupby([column, TARGET_COLUMN], as_index=False).size()
     fig = px.bar(
         grouped,
         x=column,
-        y="Employability Rate",
-        color="Employability Rate",
-        color_continuous_scale="Teal",
-        title=f"Employability Rate by {column}",
+        y="size",
+        color=TARGET_COLUMN,
+        color_discrete_sequence=COLOR_SEQUENCE,
+        title=f"Distribusi Waktu Tunggu by {column}",
+        barmode="stack",
     )
     fig.update_layout(margin=dict(l=10, r=10, t=45, b=10), xaxis_tickangle=-25)
     return fig
