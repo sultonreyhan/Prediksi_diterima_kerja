@@ -11,7 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-DATA_PATH = Path("data/dummy_dataset_employability.xlsx")
+DATA_PATH = Path("data/Kuesioner Faktor Akademik dan Aktivitas Organisasi terhadap Kecepatan Diterima Kerja Lulusan Mahasiswa  (Responses) - Form responses 1.csv")
 TARGET_COLUMN = "Status Pekerjaan"
 POSITIVE_LABEL = "Sudah bekerja"
 
@@ -37,11 +37,35 @@ FEATURE_COLUMNS = [
     "Jumlah Organisasi",
 ]
 
+COLUMN_MAPPING = {
+    "Tahun Lulus Kuliah": "Tahun Lulus",
+    "Pilih Rumpun Jurusan": "Rumpun Jurusan",
+    "Jenjang Pendidikan": "Jenjang Pendidikan",
+    "Berapa kategori IPK Anda saat lulus?": "Kategori IPK",
+    "Berapa lama masa studi Anda": "Lama Masa Studi",
+    "Apakah Anda pernah mengikuti program magang": "Pernah Magang",
+    "Apakah Anda memiliki sertifikasi kompetensi": "Memiliki Sertifikasi",
+    "Apakah Anda pernah memiliki prestasi akademik/non-akademik selama kuliah?": "Memiliki Prestasi",
+    "Apakah Anda aktif mengikuti organisasi selama kuliah?": "Aktif Organisasi",
+    "Organisasi apa yang pernah Anda ikuti?": "Jenis Organisasi",
+    "Jabatan tertinggi yang pernah Anda pegang di organisasi?": "Jabatan Organisasi",
+    "Seberapa aktif Anda dalam kegiatan organisasi": "Tingkat Keaktifan Organisasi (1-5)",
+    "Berapa jumlah organisasi yang pernah Anda ikuti": "Jumlah Organisasi",
+    "Apakah Anda saat ini sudah bekerja": "Status Pekerjaan",
+    "Berapa lama waktu yang Anda butuhkan untuk mendapatkan pekerjaan pertama setelah lulus?": "Waktu Tunggu Kerja",
+    "Apakah pekerjaan Anda saat ini sesuai dengan bidang kuliah?": "Kesesuaian Pekerjaan",
+    "Kisaran gaji pertama Anda setelah bekerja": "Kisaran Gaji",
+}
+
+DROP_COLUMNS = ["Timestamp", "Saran", "Email address"]
+
 
 def load_dataset(path: str | Path = DATA_PATH) -> pd.DataFrame:
-    """Load the Excel dataset and normalize column names lightly."""
-    df = pd.read_excel(path)
+    """Load the CSV survey dataset and normalize column names."""
+    df = pd.read_csv(path)
     df.columns = df.columns.str.strip()
+    df = df.drop(columns=[c for c in DROP_COLUMNS if c in df.columns], errors="ignore")
+    df = df.rename(columns=COLUMN_MAPPING)
     return df
 
 

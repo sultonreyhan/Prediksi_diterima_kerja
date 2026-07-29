@@ -30,7 +30,7 @@ st.set_page_config(
 )
 
 
-DATA_PATH = Path("data/dummy_dataset_employability.xlsx")
+DATA_PATH = Path("data/Kuesioner Faktor Akademik dan Aktivitas Organisasi terhadap Kecepatan Diterima Kerja Lulusan Mahasiswa  (Responses) - Form responses 1.csv")
 
 
 CUSTOM_CSS = """
@@ -240,7 +240,7 @@ def render_preprocessing() -> None:
         (
             "1. Cleaning",
             "Dataset dibaca dari Excel, nama kolom dirapikan, dan missing value dicek melalui halaman Dataset Overview.",
-            "df = pd.read_excel('data/dummy_dataset_employability.xlsx')\ndf.columns = df.columns.str.strip()\ndf.isna().sum()",
+            "df = pd.read_csv('data/kuesioner.csv')\ndf.columns = df.columns.str.strip()\ndf.isna().sum()",
         ),
         (
             "2. Target Engineering",

@@ -18,7 +18,7 @@ Dashboard Streamlit untuk eksplorasi dataset tracer study dan prediksi peluang l
 ├── app.py
 ├── requirements.txt
 ├── data/
-│   └── dummy_dataset_employability.xlsx
+│   └── Kuesioner Faktor Akademik dan Aktivitas Organisasi terhadap Kecepatan Diterima Kerja Lulusan Mahasiswa  (Responses) - Form responses 1.csv
 ├── notebooks/
 │   └── eksperimen.ipynb
 ├── saved_models/

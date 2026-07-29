@@ -174,7 +174,7 @@ def load_model(path: str | Path = MODEL_PATH) -> dict[str, Any]:
 
 
 def train_and_save_model(
-    dataset_path: str | Path = "data/dummy_dataset_employability.xlsx",
+    dataset_path: str | Path = "data/Kuesioner Faktor Akademik dan Aktivitas Organisasi terhadap Kecepatan Diterima Kerja Lulusan Mahasiswa  (Responses) - Form responses 1.csv",
     model_path: str | Path = MODEL_PATH,
 ) -> dict[str, Any]:
     """Train models from the dataset and persist the best one."""
