@@ -2,31 +2,53 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.preprocessing import FEATURE_COLUMNS, build_candidate_dataframe
+from src.preprocessing import (
+    FEATURE_COLUMNS,
+    build_candidate_dataframe,
+    split_jenis_string,
+    validate_jumlah_jenis_binding,
+)
 
 
-def _validate_candidate(candidate: dict) -> None:
+def _validate_candidate(candidate: dict) -> str | None:
     jumlah = str(candidate.get("Jumlah Organisasi", "0"))
-    if jumlah == "0":
-        assert candidate.get("Jenis Organisasi") == "Tidak mengikuti organisasi", (
-            "Jumlah Organisasi 0 tidak sesuai dengan Jenis Organisasi"
-        )
-        assert candidate.get("Jabatan Organisasi") == "Tidak pernah mengikuti organisasi", (
-            "Jumlah Organisasi 0 tidak sesuai dengan Jabatan Organisasi"
-        )
-        assert candidate.get("Aktif Organisasi") == "Tidak", (
-            "Jumlah Organisasi 0 harus memiliki Aktif Organisasi = Tidak"
-        )
-    aktif = candidate.get("Aktif Organisasi", "Tidak")
+    jenis = str(candidate.get("Jenis Organisasi", "Tidak mengikuti organisasi"))
+    aktif = str(candidate.get("Aktif Organisasi", "Tidak"))
+    jabatan = str(candidate.get("Jabatan Organisasi", "Tidak pernah mengikuti organisasi"))
     tingkat = candidate.get("Tingkat Keaktifan Organisasi (1-5)", 1)
+
+    valid, msg = validate_jumlah_jenis_binding(jumlah, jenis)
+    if not valid:
+        return msg
+
+    if jumlah == "0":
+        if jenis != "Tidak mengikuti organisasi":
+            return "Jumlah Organisasi 0 harus memiliki Jenis Organisasi = Tidak mengikuti organisasi."
+        if jabatan != "Tidak pernah mengikuti organisasi":
+            return "Jumlah Organisasi 0 harus memiliki Jabatan Organisasi = Tidak pernah mengikuti organisasi."
+        if aktif != "Tidak":
+            return "Jumlah Organisasi 0 harus memiliki Aktif Organisasi = Tidak."
+
+    if aktif == "Tidak" and jumlah != "0":
+        selected = split_jenis_string(jenis)
+        if len(selected) > 0:
+            pass
+
     if aktif == "Tidak":
-        assert tingkat == 1, (
-            "Aktif Organisasi = Tidak tidak sesuai dengan Tingkat Keaktifan"
-        )
+        if tingkat != 1:
+            return "Aktif Organisasi = Tidak harus memiliki Tingkat Keaktifan = 1."
+
+    if aktif == "Ya" and jumlah == "0":
+        return "Jumlah Organisasi 0 tidak boleh memiliki Aktif Organisasi = Ya."
+
+    return None
 
 
 def predict_single(artifact: dict, candidate: dict) -> dict:
-    _validate_candidate(candidate)
+    error = _validate_candidate(candidate)
+    if error:
+        return {"error": error}
+
     candidate_df = build_candidate_dataframe(candidate)
 
     pipeline = artifact["pipeline"]

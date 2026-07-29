@@ -75,6 +75,60 @@ COLUMN_MAPPING = {
 
 DROP_COLUMNS = ["Timestamp", "Saran", "Email address"]
 
+JENIS_ORGANISASI_LIST = [
+    "BEM (Badan Eksekutif Mahasiswa)",
+    "Himpunan Mahasiswa",
+    "Kepanitaan Acara",
+    "Komunitas Kampus",
+    "TSR PMI",
+    "UKM (Unit Kegiatan Mahasiswa)",
+]
+
+JUMLAH_ORGANISASI_OPTIONS = ["0", "1", "2", ">2"]
+JENIS_SEPARATOR = ", "
+
+
+def normalize_jenis_string(selected_types: list[str]) -> str:
+    cleaned = [t.strip() for t in selected_types if t.strip()]
+    deduped = sorted(set(cleaned))
+    if not deduped:
+        return "Tidak mengikuti organisasi"
+    return JENIS_SEPARATOR.join(deduped)
+
+
+def split_jenis_string(jenis_str: str) -> list[str]:
+    if jenis_str == "Tidak mengikuti organisasi":
+        return []
+    return [t.strip() for t in jenis_str.split(JENIS_SEPARATOR) if t.strip()]
+
+
+def validate_jumlah_jenis_binding(jumlah: str, jenis_str: str) -> tuple[bool, str]:
+    selected = split_jenis_string(jenis_str)
+    count = len(selected)
+
+    if jumlah == "0":
+        if count != 0:
+            return False, "Jumlah organisasi 0 tidak boleh memiliki jenis organisasi."
+        return True, ""
+    elif jumlah == "1":
+        if count < 1:
+            return False, "Jumlah organisasi adalah 1. Pilih tepat 1 jenis organisasi."
+        if count > 1:
+            return False, f"Jumlah organisasi adalah 1. Pilih tepat 1 jenis organisasi (saat ini {count})."
+        return True, ""
+    elif jumlah == "2":
+        if count < 2:
+            return False, f"Jumlah organisasi adalah 2. Pilih tepat 2 jenis organisasi (saat ini {count})."
+        if count > 2:
+            return False, f"Jumlah organisasi adalah 2. Pilih tepat 2 jenis organisasi (saat ini {count})."
+        return True, ""
+    elif jumlah == ">2":
+        if count < 3:
+            return False, f"Jumlah organisasi lebih dari 2. Pilih minimal 3 jenis organisasi (saat ini {count})."
+        return True, ""
+    else:
+        return False, f"Nilai Jumlah Organisasi tidak dikenal: {jumlah}"
+
 
 def load_dataset(path: str | Path = DATA_PATH) -> pd.DataFrame:
     df = pd.read_csv(path)

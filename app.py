@@ -9,7 +9,16 @@ import streamlit as st
 
 from src.model import MODEL_PATH, train_and_save_model, train_models
 from src.predict import predict_batch, predict_single
-from src.preprocessing import FEATURE_COLUMNS, TARGET_COLUMN, get_input_options, load_dataset
+from src.preprocessing import (
+    FEATURE_COLUMNS,
+    JENIS_ORGANISASI_LIST,
+    JUMLAH_ORGANISASI_OPTIONS,
+    TARGET_COLUMN,
+    get_input_options,
+    load_dataset,
+    normalize_jenis_string,
+    validate_jumlah_jenis_binding,
+)
 from src.visualization import (
     categorical_bar_chart,
     confusion_matrix_chart,
@@ -284,6 +293,21 @@ def render_preprocessing() -> None:
             st.code(code, language="python")
 
 
+def _validate_org_binding(candidate: dict) -> str | None:
+    jumlah = str(candidate.get("Jumlah Organisasi", "0"))
+    jenis = str(candidate.get("Jenis Organisasi", "Tidak mengikuti organisasi"))
+    aktif = str(candidate.get("Aktif Organisasi", "Tidak"))
+
+    valid, msg = validate_jumlah_jenis_binding(jumlah, jenis)
+    if not valid:
+        return msg
+
+    if jumlah == "0" and aktif == "Ya":
+        return "Jumlah Organisasi 0 tidak boleh memiliki Aktif Organisasi = Ya."
+
+    return None
+
+
 def render_prediction(df: pd.DataFrame, artifact: dict) -> None:
     render_header(
         "Prediksi Waktu Tunggu Kerja",
@@ -328,7 +352,7 @@ def render_prediction(df: pd.DataFrame, artifact: dict) -> None:
     with form_cols[idx % 3]:
         jumlah = st.selectbox(
             "Jumlah Organisasi",
-            options["Jumlah Organisasi"],
+            JUMLAH_ORGANISASI_OPTIONS,
             key="jumlah_organisasi",
         )
     idx += 1
@@ -341,12 +365,18 @@ def render_prediction(df: pd.DataFrame, artifact: dict) -> None:
         candidate["Aktif Organisasi"] = "Tidak"
         candidate["Tingkat Keaktifan Organisasi (1-5)"] = 1
     else:
-        with form_cols[idx % 3]:
-            candidate["Jenis Organisasi"] = st.selectbox(
-                "Jenis Organisasi",
-                options["Jenis Organisasi"],
-                key="jenis_organisasi",
-            )
+        max_sel = None if jumlah == ">2" else int(jumlah)
+        multisel_key = f"jenis_organisasi_jml{jumlah}"
+
+        selected_jenis = st.multiselect(
+            "Jenis Organisasi",
+            JENIS_ORGANISASI_LIST,
+            max_selections=max_sel,
+            key=multisel_key,
+        )
+        jenis_str = normalize_jenis_string(selected_jenis)
+        candidate["Jenis Organisasi"] = jenis_str
+
         idx += 1
         with form_cols[idx % 3]:
             candidate["Jabatan Organisasi"] = st.selectbox(
@@ -382,31 +412,38 @@ def render_prediction(df: pd.DataFrame, artifact: dict) -> None:
     predict_clicked = st.button("Prediksi Waktu Tunggu", use_container_width=True)
 
     if predict_clicked:
-        result = predict_single(artifact, candidate)
-        predicted_class = result["predicted_class"]
-        confidence = result["confidence"]
-        probabilities = result["probabilities"]
+        error = _validate_org_binding(candidate)
+        if error:
+            st.error(error)
+        else:
+            result = predict_single(artifact, candidate)
+            if "error" in result:
+                st.error(result["error"])
+            else:
+                predicted_class = result["predicted_class"]
+                confidence = result["confidence"]
+                probabilities = result["probabilities"]
 
-        st.write("")
-        col_result, col_probs = st.columns([1, 1])
+                st.write("")
+                col_result, col_probs = st.columns([1, 1])
 
-        with col_result:
-            st.markdown("<div class='pred-class'>" + predicted_class + "</div>", unsafe_allow_html=True)
-            st.caption("Prediksi Waktu Mendapatkan Pekerjaan")
-            st.metric("Confidence Prediksi", f"{confidence:.1%}")
+                with col_result:
+                    st.markdown("<div class='pred-class'>" + predicted_class + "</div>", unsafe_allow_html=True)
+                    st.caption("Prediksi Waktu Mendapatkan Pekerjaan")
+                    st.metric("Confidence Prediksi", f"{confidence:.1%}")
 
-            interpretation_map = {
-                "< 1 bulan": "Model memperkirakan kandidat cenderung memperoleh pekerjaan pertama dalam waktu kurang dari 1 bulan setelah lulus.",
-                "1 - 3 bulan": "Model memperkirakan kandidat cenderung memperoleh pekerjaan pertama dalam rentang 1–3 bulan setelah lulus.",
-                "3 - 6 bulan": "Model memperkirakan kandidat cenderung memperoleh pekerjaan pertama dalam rentang 3–6 bulan setelah lulus.",
-                "> 6 bulan": "Model memperkirakan waktu mendapatkan pekerjaan pertama cenderung lebih dari 6 bulan setelah lulus.",
-            }
-            interpretation = interpretation_map.get(predicted_class, "")
-            if interpretation:
-                st.info(interpretation)
+                    interpretation_map = {
+                        "< 1 bulan": "Model memperkirakan kandidat cenderung memperoleh pekerjaan pertama dalam waktu kurang dari 1 bulan setelah lulus.",
+                        "1 - 3 bulan": "Model memperkirakan kandidat cenderung memperoleh pekerjaan pertama dalam rentang 1–3 bulan setelah lulus.",
+                        "3 - 6 bulan": "Model memperkirakan kandidat cenderung memperoleh pekerjaan pertama dalam rentang 3–6 bulan setelah lulus.",
+                        "> 6 bulan": "Model memperkirakan waktu mendapatkan pekerjaan pertama cenderung lebih dari 6 bulan setelah lulus.",
+                    }
+                    interpretation = interpretation_map.get(predicted_class, "")
+                    if interpretation:
+                        st.info(interpretation)
 
-        with col_probs:
-            st.plotly_chart(probability_bar_chart(probabilities), use_container_width=True)
+                with col_probs:
+                    st.plotly_chart(probability_bar_chart(probabilities), use_container_width=True)
 
     st.divider()
     st.subheader("Batch Prediction")
