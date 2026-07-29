@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -128,8 +129,12 @@ def metric_card(label: str, value: str, helper: str = "") -> None:
     )
 
 
+def get_data_mtime() -> float:
+    return os.path.getmtime(DATA_PATH)
+
+
 @st.cache_data(show_spinner=False)
-def get_dataset() -> pd.DataFrame:
+def get_dataset_cached(mtime: float) -> pd.DataFrame:
     return load_dataset(DATA_PATH)
 
 
@@ -240,7 +245,7 @@ def render_preprocessing() -> None:
         (
             "1. Cleaning",
             "Dataset dibaca dari Excel, nama kolom dirapikan, dan missing value dicek melalui halaman Dataset Overview.",
-            "df = pd.read_csv('data/kuesioner.csv')\ndf.columns = df.columns.str.strip()\ndf.isna().sum()",
+            "df = pd.read_csv('data/kuesioner_faktor_akademik.csv')\ndf.columns = df.columns.str.strip()\ndf.isna().sum()",
         ),
         (
             "2. Target Engineering",
@@ -480,7 +485,7 @@ def render_about() -> None:
 def main() -> None:
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-    df = get_dataset()
+    df = get_dataset_cached(get_data_mtime())
     artifact = get_model_artifact()
 
     st.sidebar.title("HR Analytics")
